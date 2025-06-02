@@ -1,0 +1,1500 @@
+import os
+import sys
+import traceback
+import customtkinter as ctk
+import sounddevice as sd
+import numpy as np
+import tempfile
+import threading
+import json
+import queue
+import time
+import requests
+import subprocess
+import webbrowser
+import psutil
+import platform
+import shutil
+import glob
+import cv2
+import pyautogui
+import pyttsx3
+import speech_recognition as sr
+import pygame
+from pathlib import Path
+from dotenv import load_dotenv
+from scipy.io.wavfile import write as write_wav
+import sqlite3
+from datetime import datetime, timedelta
+import re
+import random
+import socket
+import smtplib
+import schedule
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+
+# Advanced Windows-specific imports
+if platform.system() == "Windows":
+    import win32gui
+    import win32con
+    import win32api
+    import win32process
+    import win32clipboard
+    import win32com.client
+    import winreg
+    import ctypes
+    from ctypes import wintypes
+    import win32security
+    import win32net
+    import win32netcon
+
+# Machine Learning and AI imports
+try:
+    import openai
+    import anthropic
+    from transformers import pipeline
+    import torch
+    import torchvision
+    from PIL import Image, ImageGrab
+    import face_recognition
+    import cv2
+except ImportError as e:
+    print(f"Advanced AI libraries not available: {e}")
+
+# === Safe imports with error handling ===
+print("Starting Jarvis Ultimate - Complete System Controller...")
+print("Loading environment variables...")
+load_dotenv()
+
+# API Keys
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
+# Email Configuration
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+
+# Global variables
+whisper_model = None
+vosk_model = None
+elevenlabs_client = None
+tts_engine = None
+available_llms = {}
+current_llm = None
+is_speaking = False
+is_listening = False
+command_queue = queue.Queue()
+response_queue = queue.Queue()
+audio_device_id = None
+face_cascade = None
+voice_recognition_active = False
+
+class AdvancedSystemController:
+    """Advanced system controller with full Windows integration"""
+    
+    def __init__(self):
+        self.running_processes = {}
+        self.app_paths = self.discover_applications()
+        self.setup_database()
+        self.setup_voice_engine()
+        self.setup_advanced_features()
+        self.scheduled_tasks = []
+        self.user_profile = self.load_user_profile()
+        
+    def setup_database(self):
+        """Setup comprehensive database"""
+        self.db_path = "jarvis_ultimate.db"
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        
+        # Enhanced database schema
+        tables = [
+            '''CREATE TABLE IF NOT EXISTS contacts (
+                id INTEGER PRIMARY KEY,
+                name TEXT UNIQUE,
+                phone TEXT,
+                email TEXT,
+                whatsapp TEXT,
+                address TEXT,
+                birthday DATE,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS commands_history (
+                id INTEGER PRIMARY KEY,
+                command TEXT,
+                response TEXT,
+                command_type TEXT,
+                execution_time REAL,
+                success BOOLEAN,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS user_preferences (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                category TEXT
+            )''',
+            '''CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                command TEXT,
+                schedule_time TEXT,
+                repeat_pattern TEXT,
+                active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS system_events (
+                id INTEGER PRIMARY KEY,
+                event_type TEXT,
+                description TEXT,
+                severity TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS file_operations (
+                id INTEGER PRIMARY KEY,
+                operation TEXT,
+                source_path TEXT,
+                destination_path TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )'''
+        ]
+        
+        for table in tables:
+            self.conn.execute(table)
+        self.conn.commit()
+    
+    def setup_voice_engine(self):
+        """Setup advanced voice synthesis"""
+        global tts_engine
+        try:
+            tts_engine = pyttsx3.init()
+            voices = tts_engine.getProperty('voices')
+            
+            # Try to set a better voice
+            for voice in voices:
+                if 'zira' in voice.name.lower() or 'david' in voice.name.lower():
+                    tts_engine.setProperty('voice', voice.id)
+                    break
+            
+            tts_engine.setProperty('rate', 180)
+            tts_engine.setProperty('volume', 0.9)
+            print("✓ TTS Engine initialized")
+        except Exception as e:
+            print(f"❌ TTS Engine error: {e}")
+    
+    def setup_advanced_features(self):
+        """Setup advanced AI and computer vision features"""
+        global face_cascade
+        
+        # Initialize face detection
+        try:
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            print("✓ Face detection initialized")
+        except Exception as e:
+            print(f"❌ Face detection error: {e}")
+        
+        # Initialize pygame for advanced sound
+        try:
+            pygame.mixer.init()
+            print("✓ Advanced audio initialized")
+        except Exception as e:
+            print(f"❌ Advanced audio error: {e}")
+    
+    def discover_applications(self):
+        """Comprehensive application discovery"""
+        apps = {}
+        
+        # Registry-based discovery for Windows
+        if platform.system() == "Windows":
+            try:
+                # Check installed programs in registry
+                reg_paths = [
+                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                    r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+                ]
+                
+                for reg_path in reg_paths:
+                    try:
+                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
+                        for i in range(winreg.QueryInfoKey(key)[0]):
+                            try:
+                                subkey_name = winreg.EnumKey(key, i)
+                                subkey = winreg.OpenKey(key, subkey_name)
+                                
+                                try:
+                                    name = winreg.QueryValueEx(subkey, "DisplayName")[0]
+                                    try:
+                                        install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                        if install_location and os.path.exists(install_location):
+                                            # Find executable
+                                            for root, dirs, files in os.walk(install_location):
+                                                for file in files:
+                                                    if file.endswith('.exe') and name.lower().replace(' ', '') in file.lower():
+                                                        apps[name.lower().replace(' ', '')] = os.path.join(root, file)
+                                                        break
+                                                if name.lower().replace(' ', '') in apps:
+                                                    break
+                                    except FileNotFoundError:
+                                        pass
+                                except FileNotFoundError:
+                                    pass
+                                
+                                winreg.CloseKey(subkey)
+                            except Exception:
+                                continue
+                        winreg.CloseKey(key)
+                    except Exception:
+                        continue
+            except Exception as e:
+                print(f"Registry scan error: {e}")
+        
+        # Enhanced path-based discovery
+        common_paths = [
+            r"C:\Program Files",
+            r"C:\Program Files (x86)",
+            os.path.expanduser("~\\AppData\\Local"),
+            os.path.expanduser("~\\AppData\\Roaming"),
+            r"C:\Users\Public\Desktop",
+            os.path.expanduser("~\\Desktop")
+        ]
+        
+        # Comprehensive app patterns
+        app_patterns = {
+            # Browsers
+            'chrome': ['chrome.exe', 'Google/Chrome/Application/chrome.exe'],
+            'firefox': ['firefox.exe', 'Mozilla Firefox/firefox.exe'],
+            'edge': ['msedge.exe', 'Microsoft/Edge/Application/msedge.exe'],
+            'opera': ['opera.exe', 'Opera/opera.exe'],
+            
+            # Communication
+            'discord': ['Discord.exe', 'Discord/app-*/Discord.exe'],
+            'whatsapp': ['WhatsApp.exe', 'WhatsApp/WhatsApp.exe'],
+            'telegram': ['Telegram.exe', 'Telegram Desktop/Telegram.exe'],
+            'skype': ['Skype.exe', 'Microsoft/Skype for Desktop/Skype.exe'],
+            'zoom': ['Zoom.exe', 'Zoom/bin/Zoom.exe'],
+            'teams': ['Teams.exe', 'Microsoft/Teams/current/Teams.exe'],
+            
+            # Media
+            'spotify': ['Spotify.exe', 'Spotify/Spotify.exe'],
+            'vlc': ['vlc.exe', 'VideoLAN/VLC/vlc.exe'],
+            'itunes': ['iTunes.exe', 'iTunes/iTunes.exe'],
+            'netflix': ['Netflix.exe', 'WindowsApps/*/Netflix.exe'],
+            
+            # Development
+            'vscode': ['Code.exe', 'Microsoft VS Code/Code.exe'],
+            'notepad++': ['notepad++.exe', 'Notepad++/notepad++.exe'],
+            'pycharm': ['pycharm64.exe', 'JetBrains/*/bin/pycharm64.exe'],
+            'sublime': ['sublime_text.exe', 'Sublime Text*/sublime_text.exe'],
+            'atom': ['atom.exe', 'atom/atom.exe'],
+            
+            # Gaming
+            'steam': ['steam.exe', 'Steam/steam.exe'],
+            'epic': ['EpicGamesLauncher.exe', 'Epic Games/Launcher/Portal/Binaries/Win64/EpicGamesLauncher.exe'],
+            
+            # Productivity
+            'word': ['WINWORD.EXE', 'Microsoft Office/*/WINWORD.EXE'],
+            'excel': ['EXCEL.EXE', 'Microsoft Office/*/EXCEL.EXE'],
+            'powerpoint': ['POWERPNT.EXE', 'Microsoft Office/*/POWERPNT.EXE'],
+            'outlook': ['OUTLOOK.EXE', 'Microsoft Office/*/OUTLOOK.EXE'],
+            'onenote': ['ONENOTE.EXE', 'Microsoft Office/*/ONENOTE.EXE'],
+            
+            # System Tools
+            'calculator': ['calc.exe', 'System32/calc.exe'],
+            'notepad': ['notepad.exe', 'System32/notepad.exe'],
+            'paint': ['mspaint.exe', 'System32/mspaint.exe'],
+            'cmd': ['cmd.exe', 'System32/cmd.exe'],
+            'powershell': ['powershell.exe', 'System32/WindowsPowerShell/v1.0/powershell.exe'],
+        }
+        
+        for app_name, patterns in app_patterns.items():
+            if app_name not in apps:  # Only add if not found in registry
+                for pattern in patterns:
+                    for base_path in common_paths:
+                        full_path = os.path.join(base_path, pattern)
+                        if '*' in full_path:
+                            matches = glob.glob(full_path)
+                            if matches:
+                                apps[app_name] = matches[0]
+                                break
+                        elif os.path.exists(full_path):
+                            apps[app_name] = full_path
+                            break
+                    if app_name in apps:
+                        break
+        
+        print(f"✓ Discovered {len(apps)} applications")
+        return apps
+    
+    def open_application(self, app_name):
+        """Enhanced application launcher"""
+        app_name = app_name.lower().replace(' ', '').replace('-', '').replace('_', '')
+        
+        # Direct app paths
+        if app_name in self.app_paths:
+            try:
+                if app_name in ['cmd', 'powershell']:
+                    # Run command prompt as administrator
+                    subprocess.Popen(['runas', '/user:Administrator', self.app_paths[app_name]], shell=True)
+                else:
+                    subprocess.Popen([self.app_paths[app_name]])
+                return f"✓ Opened {app_name.title()}"
+            except Exception as e:
+                try:
+                    # Fallback: try with shell=True
+                    subprocess.Popen([self.app_paths[app_name]], shell=True)
+                    return f"✓ Opened {app_name.title()}"
+                except Exception as e2:
+                    return f"❌ Failed to open {app_name}: {e2}"
+        
+        # Web-based apps
+        web_apps = {
+            'youtube': 'https://youtube.com',
+            'gmail': 'https://gmail.com',
+            'facebook': 'https://facebook.com',
+            'twitter': 'https://twitter.com',
+            'x': 'https://x.com',
+            'instagram': 'https://instagram.com',
+            'linkedin': 'https://linkedin.com',
+            'netflix': 'https://netflix.com',
+            'amazon': 'https://amazon.com',
+            'reddit': 'https://reddit.com',
+            'github': 'https://github.com',
+            'stackoverflow': 'https://stackoverflow.com',
+            'openai': 'https://chat.openai.com',
+            'claude': 'https://claude.ai',
+            'google': 'https://google.com',
+            'maps': 'https://maps.google.com',
+            'drive': 'https://drive.google.com',
+            'docs': 'https://docs.google.com',
+            'sheets': 'https://sheets.google.com',
+            'slides': 'https://slides.google.com'
+        }
+        
+        if app_name in web_apps:
+            webbrowser.open(web_apps[app_name])
+            return f"✓ Opened {app_name.title()} in browser"
+        
+        # Windows Store apps
+        store_apps = {
+            'calculator': 'calculator:',
+            'mail': 'outlookmail:',
+            'calendar': 'outlookcal:',
+            'photos': 'ms-photos:',
+            'movies': 'microsoftvideo:',
+            'music': 'microsoftmusic:',
+            'store': 'ms-windows-store:',
+            'settings': 'ms-settings:'
+        }
+        
+        if app_name in store_apps:
+            try:
+                os.system(f'start {store_apps[app_name]}')
+                return f"✓ Opened {app_name.title()}"
+            except Exception as e:
+                return f"❌ Failed to open {app_name}: {e}"
+        
+        # Try Windows start command
+        try:
+            subprocess.run(['start', '', app_name], shell=True, check=True)
+            return f"✓ Attempted to open {app_name}"
+        except:
+            return f"❌ Could not find application: {app_name}"
+    
+    def control_system_volume(self, action, level=None):
+        """Control system volume"""
+        try:
+            if platform.system() == "Windows":
+                if action == "mute":
+                    os.system("nircmd mutesysvolume 1")
+                    return "✓ System muted"
+                elif action == "unmute":
+                    os.system("nircmd mutesysvolume 0")
+                    return "✓ System unmuted"
+                elif action == "set" and level is not None:
+                    level = max(0, min(100, int(level)))
+                    os.system(f"nircmd setsysvolume {int(level * 655.35)}")
+                    return f"✓ Volume set to {level}%"
+                elif action == "up":
+                    os.system("nircmd changesysvolume 5000")
+                    return "✓ Volume increased"
+                elif action == "down":
+                    os.system("nircmd changesysvolume -5000")
+                    return "✓ Volume decreased"
+        except Exception as e:
+            return f"❌ Volume control error: {e}"
+    
+    def control_display(self, action):
+        """Control display settings"""
+        try:
+            if action == "lock":
+                ctypes.windll.user32.LockWorkStation()
+                return "✓ Screen locked"
+            elif action == "sleep":
+                os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+                return "✓ System going to sleep"
+            elif action == "shutdown":
+                os.system("shutdown /s /t 1")
+                return "✓ System shutting down"
+            elif action == "restart":
+                os.system("shutdown /r /t 1")
+                return "✓ System restarting"
+            elif action == "hibernate":
+                os.system("shutdown /h")
+                return "✓ System hibernating"
+        except Exception as e:
+            return f"❌ Display control error: {e}"
+    
+    def file_operations(self, operation, source=None, destination=None):
+        """Advanced file operations"""
+        try:
+            if operation == "create_folder" and source:
+                os.makedirs(source, exist_ok=True)
+                return f"✓ Folder created: {source}"
+            elif operation == "delete" and source:
+                if os.path.isfile(source):
+                    os.remove(source)
+                    return f"✓ File deleted: {source}"
+                elif os.path.isdir(source):
+                    shutil.rmtree(source)
+                    return f"✓ Folder deleted: {source}"
+            elif operation == "copy" and source and destination:
+                if os.path.isfile(source):
+                    shutil.copy2(source, destination)
+                else:
+                    shutil.copytree(source, destination)
+                return f"✓ Copied {source} to {destination}"
+            elif operation == "move" and source and destination:
+                shutil.move(source, destination)
+                return f"✓ Moved {source} to {destination}"
+            elif operation == "search" and source:
+                results = []
+                for root, dirs, files in os.walk("C:/"):
+                    for file in files:
+                        if source.lower() in file.lower():
+                            results.append(os.path.join(root, file))
+                            if len(results) >= 10:  # Limit results
+                                break
+                    if len(results) >= 10:
+                        break
+                return f"✓ Found {len(results)} files matching '{source}'"
+        except Exception as e:
+            return f"❌ File operation error: {e}"
+    
+    def network_operations(self, operation):
+        """Network and internet operations"""
+        try:
+            if operation == "wifi_info":
+                result = subprocess.run(['netsh', 'wlan', 'show', 'profiles'], 
+                                      capture_output=True, text=True)
+                profiles = []
+                for line in result.stdout.split('\n'):
+                    if 'All User Profile' in line:
+                        profile = line.split(':')[1].strip()
+                        profiles.append(profile)
+                return f"✓ Found {len(profiles)} WiFi profiles"
+            
+            elif operation == "ip_info":
+                hostname = socket.gethostname()
+                local_ip = socket.gethostbyname(hostname)
+                
+                # Get public IP
+                try:
+                    response = requests.get('https://api.ipify.org', timeout=5)
+                    public_ip = response.text
+                except:
+                    public_ip = "Unknown"
+                
+                return f"✓ Hostname: {hostname}\nLocal IP: {local_ip}\nPublic IP: {public_ip}"
+            
+            elif operation == "speed_test":
+                return "✓ Speed test initiated (requires speedtest-cli)"
+                
+        except Exception as e:
+            return f"❌ Network operation error: {e}"
+    
+    def get_system_info(self):
+        """Comprehensive system information"""
+        try:
+            # Basic system info
+            info = {
+                'cpu_percent': psutil.cpu_percent(interval=1),
+                'cpu_count': psutil.cpu_count(),
+                'memory_percent': psutil.virtual_memory().percent,
+                'memory_total': round(psutil.virtual_memory().total / (1024**3), 2),
+                'memory_available': round(psutil.virtual_memory().available / (1024**3), 2),
+                'disk_percent': psutil.disk_usage('C:').percent if platform.system() == "Windows" else psutil.disk_usage('/').percent,
+                'disk_total': round(psutil.disk_usage('C:').total / (1024**3), 2) if platform.system() == "Windows" else round(psutil.disk_usage('/').total / (1024**3), 2),
+                'battery': None,
+                'boot_time': datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S"),
+                'platform': platform.platform(),
+                'processor': platform.processor(),
+                'python_version': platform.python_version()
+            }
+            
+            # Battery info
+            try:
+                battery = psutil.sensors_battery()
+                if battery:
+                    info['battery'] = {
+                        'percent': battery.percent,
+                        'plugged': battery.power_plugged,
+                        'time_left': str(timedelta(seconds=battery.secsleft)) if battery.secsleft != psutil.POWER_TIME_UNLIMITED else "Unlimited"
+                    }
+            except:
+                pass
+            
+            # Network info
+            try:
+                net_io = psutil.net_io_counters()
+                info['network'] = {
+                    'bytes_sent': round(net_io.bytes_sent / (1024**2), 2),
+                    'bytes_recv': round(net_io.bytes_recv / (1024**2), 2)
+                }
+            except:
+                pass
+            
+            return info
+        except Exception as e:
+            return {'error': str(e)}
+    
+    def schedule_task(self, task_name, command, schedule_time, repeat_pattern=None):
+        """Schedule tasks"""
+        try:
+            self.conn.execute(
+                "INSERT INTO scheduled_tasks (name, command, schedule_time, repeat_pattern) VALUES (?, ?, ?, ?)",
+                (task_name, command, schedule_time, repeat_pattern)
+            )
+            self.conn.commit()
+            return f"✓ Task '{task_name}' scheduled for {schedule_time}"
+        except Exception as e:
+            return f"❌ Scheduling error: {e}"
+    
+    def load_user_profile(self):
+        """Load user profile and preferences"""
+        try:
+            cursor = self.conn.execute("SELECT key, value FROM user_preferences")
+            preferences = dict(cursor.fetchall())
+            return preferences
+        except:
+            return {}
+    
+    def save_user_preference(self, key, value, category="general"):
+        """Save user preference"""
+        try:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO user_preferences (key, value, category) VALUES (?, ?, ?)",
+                (key, value, category)
+            )
+            self.conn.commit()
+            return f"✓ Preference saved: {key}"
+        except Exception as e:
+            return f"❌ Preference save error: {e}"
+
+class AdvancedAudioManager:
+    """Enhanced audio management with multiple backends"""
+    
+    def __init__(self):
+        self.input_devices = []
+        self.output_devices = []
+        self.selected_input = None
+        self.selected_output = None
+        self.is_recording = False
+        self.is_playing = False
+        self.scan_devices()
+    
+    def scan_devices(self):
+        """Enhanced device scanning"""
+        try:
+            devices = sd.query_devices()
+            self.input_devices = []
+            self.output_devices = []
+            
+            print("\n=== ENHANCED AUDIO DEVICES ===")
+            for i, device in enumerate(devices):
+                device_info = f"ID {i}: {device['name']} ({device['max_input_channels']} in, {device['max_output_channels']} out) - {device['default_samplerate']}Hz"
+                print(device_info)
+                
+                if device['max_input_channels'] > 0:
+                    self.input_devices.append((i, device['name'], device))
+                if device['max_output_channels'] > 0:
+                    self.output_devices.append((i, device['name'], device))
+            
+            self.auto_select_devices()
+            
+        except Exception as e:
+            print(f"Error scanning audio devices: {e}")
+    
+    def auto_select_devices(self):
+        """Smart device selection"""
+        # Priority keywords for input devices
+        input_priorities = ['microphone', 'mic', 'headset', 'webcam', 'usb']
+        output_priorities = ['speaker', 'headphone', 'headset', 'usb', 'bluetooth']
+        
+        # Select best input device
+        best_input_score = -1
+        for device_id, name, info in self.input_devices:
+            score = 0
+            name_lower = name.lower()
+            
+            for i, keyword in enumerate(input_priorities):
+                if keyword in name_lower:
+                    score += (len(input_priorities) - i) * 10
+            
+            # Prefer higher channel count and sample rate
+            score += info['max_input_channels'] * 2
+            score += info['default_samplerate'] / 1000
+            
+            if score > best_input_score:
+                best_input_score = score
+                self.selected_input = device_id
+                print(f"✓ Best input device: {name} (Score: {score})")
+        
+        # Select best output device
+        best_output_score = -1
+        for device_id, name, info in self.output_devices:
+            score = 0
+            name_lower = name.lower()
+            
+            for i, keyword in enumerate(output_priorities):
+                if keyword in name_lower:
+                    score += (len(output_priorities) - i) * 10
+            
+            # Prefer higher channel count and sample rate
+            score += info['max_output_channels'] * 2
+            score += info['default_samplerate'] / 1000
+            
+            if score > best_output_score:
+                best_output_score = score
+                self.selected_output = device_id
+                print(f"✓ Best output device: {name} (Score: {score})")
+    
+    def record_audio(self, duration=5, samplerate=16000):
+        """Enhanced audio recording with noise reduction"""
+        if self.selected_input is None:
+            raise Exception("No input device selected")
+        
+        self.is_recording = True
+        try:
+            print(f"🎤 Recording for {duration} seconds...")
+            audio = sd.rec(
+                int(duration * samplerate),
+                samplerate=samplerate,
+                channels=1,
+                dtype='float32',
+                device=self.selected_input
+            )
+            sd.wait()
+            
+            # Basic noise reduction
+            audio_cleaned = self.reduce_noise(audio)
+            
+            return audio_cleaned, samplerate
+        finally:
+            self.is_recording = False
+    
+    def reduce_noise(self, audio):
+        """Basic noise reduction"""
+        try:
+            # Simple high-pass filter to remove low-frequency noise
+            from scipy import signal
+            sos = signal.butter(10, 300, btype='high', fs=16000, output='sos')
+            filtered = signal.sosfilt(sos, audio.flatten())
+            return filtered.reshape(-1, 1)
+        except:
+            return audio
+    
+    def play_audio_file(self, file_path):
+        """Play audio file"""
+        try:
+            pygame.mixer.music.load(file_path)
+            pygame.mixer.music.play()
+            return True
+        except Exception as e:
+            print(f"Audio playback error: {e}")
+            return False
+
+class EnhancedTTSManager:
+    """Advanced Text-to-Speech with multiple backends"""
+    
+    def __init__(self):
+        self.engines = {}
+        self.current_engine = None
+        self.setup_engines()
+    
+    def setup_engines(self):
+        """Setup multiple TTS engines"""
+        # Setup pyttsx3
+        try:
+            engine = pyttsx3.init()
+            voices = engine.getProperty('voices')
+            
+            # Configure voice
+            for voice in voices:
+                if any(name in voice.name.lower() for name in ['zira', 'david', 'mark', 'hazel']):
+                    engine.setProperty('voice', voice.id)
+                    break
+            
+            engine.setProperty('rate', 180)
+            engine.setProperty('volume', 0.9)
+            
+            self.engines['pyttsx3'] = engine
+            self.current_engine = 'pyttsx3'
+            print("✓ pyttsx3 TTS engine ready")
+        except Exception as e:
+            print(f"❌ pyttsx3 TTS error: {e}")
+        
+        # Setup ElevenLabs if available
+        if ELEVENLABS_API_KEY:
+            try:
+                from elevenlabs.client import ElevenLabs
+                client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+                self.engines['elevenlabs'] = client
+                print("✓ ElevenLabs TTS engine ready")
+            except Exception as e:
+                print(f"❌ ElevenLabs TTS error: {e}")
+    
+    def speak(self, text, engine=None, voice_id=None):
+        """Enhanced text-to-speech"""
+        if not text or not text.strip():
+            return
+        
+        global is_speaking
+        is_speaking = True
+        
+        try:
+            # Clean text for better speech
+            text = self.clean_text_for_speech(text)
+            
+            # Use specified engine or current default
+            engine_name = engine or self.current_engine
+            
+            if engine_name == 'elevenlabs' and 'elevenlabs' in self.engines:
+                self.speak_elevenlabs(text, voice_id)
+            elif engine_name == 'pyttsx3' and 'pyttsx3' in self.engines:
+                self.speak_pyttsx3(text)
+            else:
+                # Fallback to any available engine
+                if 'pyttsx3' in self.engines:
+                    self.speak_pyttsx3(text)
+                elif 'elevenlabs' in self.engines:
+                    self.speak_elevenlabs(text, voice_id)
+                    
+        except Exception as e:
+            print(f"❌ TTS Error: {e}")
+        finally:
+            is_speaking = False
+    
+    def clean_text_for_speech(self, text):
+        """Clean text for better speech synthesis"""
+        # Remove markdown formatting
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
+        text = re.sub(r'\*(.*?)\*', r'\1', text)      # Italic
+        text = re.sub(r'`(.*?)`', r'\1', text)        # Code
+        text = re.sub(r'#{1,6}\s*(.*)', r'\1', text)  # Headers
+        
+        # Remove URLs
+        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+        
+        # Replace symbols with words
+        replacements = {
+            '&': 'and',
+            '@': 'at',
+            '#': 'hash',
+            ': 'dollar',
+            '%': 'percent',
+            '✓': 'checkmark',
+            '❌': 'error',
+            '🎤': '',
+            '🔄': '',
+            '🚀': '',
+            '💬': '',
+            '🎛️': '',
+            '📺': '',
+            '🎵': ''
+        }
+        
+        for symbol, word in replacements.items():
+            text = text.replace(symbol, word)
+        
+        # Clean up extra spaces
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text
+    
+    def speak_pyttsx3(self, text):
+        """Speak using pyttsx3"""
+        try:
+            engine = self.engines['pyttsx3']
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            print(f"pyttsx3 speak error: {e}")
+    
+    def speak_elevenlabs(self, text, voice_id=None):
+        """Speak using ElevenLabs"""
+        try:
+            client = self.engines['elevenlabs']
+            voice_id = voice_id or ELEVENLABS_VOICE_ID
+            
+            audio = client.generate(
+                text=text,
+                voice=voice_id,
+                model="eleven_monolingual_v1"
+            )
+            
+            # Save and play audio
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as f:
+                for chunk in audio:
+                    f.write(chunk)
+                temp_path = f.name
+            
+            pygame.mixer.music.load(temp_path)
+            pygame.mixer.music.play()
+            
+            # Wait for playback to finish
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
+            
+            os.unlink(temp_path)
+            
+        except Exception as e:
+            print(f"ElevenLabs speak error: {e}")
+            # Fallback to pyttsx3
+            if 'pyttsx3' in self.engines:
+                self.speak_pyttsx3(text)
+
+class OllamaProvider:
+    """Enhanced Ollama provider with model selection"""
+    def __init__(self, base_url="http://localhost:11434", model=None):
+        self.base_url = base_url
+        self.model = model
+        self.available_models = []
+        self.available = self.check_availability()
+    
+    def check_availability(self):
+        try:
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            models_data = response.json().get("models", [])
+            self.available_models = [m["name"] for m in models_data]
+            
+            if not self.model:
+                # Select best available model
+                preferred_models = ["llama3.1", "phi3", "llama3.2", "gemma2", "qwen2", "mistral"]
+                
+                for preferred in preferred_models:
+                    for available in self.available_models:
+                        if preferred in available.lower():
+                            self.model = available.split(":")[0]
+                            print(f"✓ Selected Ollama model: {self.model}")
+                            return True
+                
+                if self.available_models:
+                    self.model = self.available_models[0].split(":")[0]
+                    print(f"✓ Using Ollama model: {self.model}")
+                    return True
+            
+            return len(self.available_models) > 0
+        except Exception as e:
+            print(f"Ollama check error: {e}")
+            return False
+    
+    def generate(self, prompt, max_tokens=200):
+        if not self.available:
+            raise Exception("Ollama not available")
+        
+        payload = {
+            "model": self.model,
+            "prompt": f"You are Jarvis, an advanced AI assistant with full system control capabilities. Be helpful, concise, and conversational. User query: {prompt}",
+            "stream": False,
+            "options": {
+                "num_predict": max_tokens,
+                "temperature": 0.7,
+                "top_p": 0.9
+            }
+        }
+        
+        response = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=30)
+        result = response.json()
+        return result.get("response", "").strip()
+
+class GroqProvider:
+    """Groq AI provider for fast inference"""
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.base_url = "https://api.groq.com/openai/v1"
+        self.model = "llama-3.1-70b-versatile"
+        self.available = bool(api_key)
+    
+    def generate(self, prompt, max_tokens=200):
+        if not self.available:
+            raise Exception("Groq API key not available")
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are Jarvis, an advanced AI assistant with full system control capabilities. Be helpful, concise, and conversational."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.7
+        }
+        
+        response = requests.post(f"{self.base_url}/chat/completions", 
+                               headers=headers, json=payload, timeout=30)
+        result = response.json()
+        
+        return result["choices"][0]["message"]["content"].strip()
+
+class EnhancedLLMManager:
+    """Ultimate LLM Manager with comprehensive capabilities"""
+    
+    def __init__(self):
+        self.providers = {}
+        self.current_provider = None
+        self.system_controller = AdvancedSystemController()
+        self.conversation_history = []
+        self.context_memory = {}
+        
+    def add_provider(self, name, provider):
+        self.providers[name] = provider
+        if not self.current_provider and hasattr(provider, 'available') and provider.available:
+            self.current_provider = name
+            print(f"✓ Set primary LLM: {name}")
+    
+    def parse_command(self, text):
+        """Enhanced command parsing with natural language understanding"""
+        text_lower = text.lower().strip()
+        
+        # System control commands
+        if any(phrase in text_lower for phrase in ['open', 'launch', 'start', 'run']):
+            # Extract app name with better parsing
+            app_matches = []
+            apps_to_check = ['youtube', 'spotify', 'chrome', 'firefox', 'discord', 'whatsapp', 
+                           'telegram', 'netflix', 'gmail', 'word', 'excel', 'powerpoint', 
+                           'notepad', 'calculator', 'paint', 'cmd', 'powershell', 'vscode']
+            
+            for app in apps_to_check:
+                if app in text_lower:
+                    app_matches.append(app)
+            
+            if app_matches:
+                return 'open_app', {'app': app_matches[0]}
+        
+        # Volume control
+        if any(phrase in text_lower for phrase in ['volume', 'sound']):
+            if 'mute' in text_lower:
+                return 'volume', {'action': 'mute'}
+            elif 'unmute' in text_lower:
+                return 'volume', {'action': 'unmute'}
+            elif any(word in text_lower for word in ['up', 'increase', 'raise']):
+                return 'volume', {'action': 'up'}
+            elif any(word in text_lower for word in ['down', 'decrease', 'lower']):
+                return 'volume', {'action': 'down'}
+            elif 'set' in text_lower:
+                # Extract number
+                numbers = re.findall(r'\d+', text_lower)
+                if numbers:
+                    return 'volume', {'action': 'set', 'level': int(numbers[0])}
+        
+        # System power commands
+        if any(phrase in text_lower for phrase in ['lock screen', 'lock computer']):
+            return 'display', {'action': 'lock'}
+        elif any(phrase in text_lower for phrase in ['sleep', 'go to sleep']):
+            return 'display', {'action': 'sleep'}
+        elif any(phrase in text_lower for phrase in ['shutdown', 'shut down', 'turn off']):
+            return 'display', {'action': 'shutdown'}
+        elif any(phrase in text_lower for phrase in ['restart', 'reboot']):
+            return 'display', {'action': 'restart'}
+        elif 'hibernate' in text_lower:
+            return 'display', {'action': 'hibernate'}
+        
+        # File operations
+        if any(phrase in text_lower for phrase in ['create folder', 'make folder']):
+            # Extract folder name
+            folder_match = re.search(r'(?:create|make) folder (?:called |named )?["\']?([^"\']+)["\']?', text_lower)
+            if folder_match:
+                return 'file_op', {'operation': 'create_folder', 'source': folder_match.group(1).strip()}
+        
+        if any(phrase in text_lower for phrase in ['delete file', 'remove file', 'delete folder']):
+            # Extract file/folder name
+            file_match = re.search(r'(?:delete|remove) (?:file|folder) ["\']?([^"\']+)["\']?', text_lower)
+            if file_match:
+                return 'file_op', {'operation': 'delete', 'source': file_match.group(1).strip()}
+        
+        # System information
+        if any(phrase in text_lower for phrase in ['system info', 'system status', 'computer status', 'system stats']):
+            return 'system_info', {}
+        
+        # Network operations
+        if any(phrase in text_lower for phrase in ['wifi info', 'network info', 'ip address']):
+            if 'wifi' in text_lower:
+                return 'network', {'operation': 'wifi_info'}
+            else:
+                return 'network', {'operation': 'ip_info'}
+        
+        # Time and date
+        if any(phrase in text_lower for phrase in ['what time', 'current time', 'time is it']):
+            return 'time_date', {'type': 'time'}
+        elif any(phrase in text_lower for phrase in ['what date', 'today date', 'current date']):
+            return 'time_date', {'type': 'date'}
+        
+        # Weather (would need API integration)
+        if any(phrase in text_lower for phrase in ['weather', 'temperature', 'forecast']):
+            return 'weather', {}
+        
+        # Screenshot
+        if any(phrase in text_lower for phrase in ['screenshot', 'screen capture', 'take picture']):
+            return 'screenshot', {}
+        
+        # Regular AI conversation
+        return 'ai_chat', {'text': text}
+    
+    def execute_system_command(self, command_type, params):
+        """Execute enhanced system commands"""
+        try:
+            if command_type == 'open_app':
+                return self.system_controller.open_application(params['app'])
+            
+            elif command_type == 'volume':
+                return self.system_controller.control_system_volume(
+                    params['action'], 
+                    params.get('level')
+                )
+            
+            elif command_type == 'display':
+                return self.system_controller.control_display(params['action'])
+            
+            elif command_type == 'file_op':
+                return self.system_controller.file_operations(
+                    params['operation'],
+                    params.get('source'),
+                    params.get('destination')
+                )
+            
+            elif command_type == 'network':
+                return self.system_controller.network_operations(params['operation'])
+            
+            elif command_type == 'system_info':
+                info = self.system_controller.get_system_info()
+                if 'error' in info:
+                    return f"❌ System info error: {info['error']}"
+                
+                response = "📊 System Status:\n"
+                response += f"🖥️ CPU: {info['cpu_percent']:.1f}% ({info['cpu_count']} cores)\n"
+                response += f"💾 Memory: {info['memory_percent']:.1f}% ({info['memory_available']:.1f}GB available of {info['memory_total']:.1f}GB)\n"
+                response += f"💿 Disk: {info['disk_percent']:.1f}% used ({info['disk_total']:.1f}GB total)\n"
+                response += f"🖥️ Platform: {info['platform']}\n"
+                response += f"🐍 Python: {info['python_version']}\n"
+                response += f"⏰ Boot Time: {info['boot_time']}"
+                
+                if info.get('battery'):
+                    bat = info['battery']
+                    status = "🔌 Plugged in" if bat['plugged'] else "🔋 On battery"
+                    response += f"\n🔋 Battery: {bat['percent']:.1f}% ({status})"
+                    if not bat['plugged'] and bat['time_left'] != "Unlimited":
+                        response += f" - {bat['time_left']} remaining"
+                
+                if info.get('network'):
+                    net = info['network']
+                    response += f"\n🌐 Network: {net['bytes_recv']:.1f}MB received, {net['bytes_sent']:.1f}MB sent"
+                
+                return response
+            
+            elif command_type == 'time_date':
+                now = datetime.now()
+                if params['type'] == 'time':
+                    return f"🕐 Current time: {now.strftime('%I:%M %p')}"
+                else:
+                    return f"📅 Today's date: {now.strftime('%A, %B %d, %Y')}"
+            
+            elif command_type == 'screenshot':
+                try:
+                    screenshot = pyautogui.screenshot()
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    filename = f"screenshot_{timestamp}.png"
+                    screenshot.save(filename)
+                    return f"📸 Screenshot saved as {filename}"
+                except Exception as e:
+                    return f"❌ Screenshot error: {e}"
+            
+            elif command_type == 'weather':
+                return "🌤️ Weather feature requires API integration. Please set up a weather API key."
+            
+            else:
+                return "❌ Command not recognized"
+                
+        except Exception as e:
+            return f"❌ System command error: {e}"
+    
+    def get_response(self, prompt, max_tokens=200):
+        """Enhanced response with context awareness"""
+        # Add to conversation history
+        self.conversation_history.append({
+            'timestamp': datetime.now(),
+            'user': prompt,
+            'type': 'user'
+        })
+        
+        # Keep history manageable
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
+        
+        # Parse the command first
+        command_type, params = self.parse_command(prompt)
+        
+        if command_type != 'ai_chat':
+            # Execute system command
+            system_response = self.execute_system_command(command_type, params)
+            
+            # Log command execution
+            self.system_controller.conn.execute(
+                "INSERT INTO commands_history (command, response, command_type, success) VALUES (?, ?, ?, ?)",
+                (prompt, system_response, command_type, "✓" in system_response)
+            )
+            self.system_controller.conn.commit()
+            
+            # Add to conversation history
+            self.conversation_history.append({
+                'timestamp': datetime.now(),
+                'assistant': system_response,
+                'type': 'system_command',
+                'command_type': command_type
+            })
+            
+            return system_response, f"System ({command_type})"
+        
+        # Regular AI chat with context
+        context_prompt = self.build_context_prompt(prompt)
+        
+        # Try providers in order of preference
+        providers_to_try = []
+        if self.current_provider and self.current_provider in self.providers:
+            providers_to_try.append(self.current_provider)
+        
+        # Add other available providers
+        for name, provider in self.providers.items():
+            if name != self.current_provider and hasattr(provider, 'available') and provider.available:
+                providers_to_try.append(name)
+        
+        for provider_name in providers_to_try:
+            try:
+                provider = self.providers[provider_name]
+                response = provider.generate(context_prompt, max_tokens)
+                if response and len(response.strip()) > 0:
+                    # Add to conversation history
+                    self.conversation_history.append({
+                        'timestamp': datetime.now(),
+                        'assistant': response,
+                        'type': 'ai_chat',
+                        'provider': provider_name
+                    })
+                    
+                    return response, provider_name
+            except Exception as e:
+                print(f"❌ {provider_name} failed: {e}")
+                continue
+        
+        fallback_response = "I'm having trouble connecting to my AI services right now. Please check your internet connection or try again later."
+        return fallback_response, "fallback"
+    
+    def build_context_prompt(self, current_prompt):
+        """Build prompt with conversation context"""
+        context_parts = []
+        
+        # Add recent conversation history
+        recent_history = self.conversation_history[-6:]  # Last 3 exchanges
+        for entry in recent_history:
+            if entry['type'] == 'user':
+                context_parts.append(f"User: {entry['user']}")
+            elif entry['type'] == 'ai_chat':
+                context_parts.append(f"Assistant: {entry['assistant']}")
+        
+        # Add current prompt
+        context_parts.append(f"User: {current_prompt}")
+        
+        # Build full context
+        if context_parts:
+            context = "\n".join(context_parts[-8:])  # Limit context size
+            return f"Conversation context:\n{context}\n\nPlease respond to the latest user message as Jarvis, a helpful AI assistant."
+        
+        return current_prompt
+
+def safe_import_and_load():
+    """Enhanced model loading with multiple providers"""
+    global whisper_model, tts_manager
+    
+    # Load speech recognition
+    try:
+        print("Loading Whisper for speech recognition...")
+        import whisper
+        whisper_model = whisper.load_model("base")  # Use base model for better accuracy
+        print("✓ Whisper loaded successfully")
+    except Exception as e:
+        print(f"❌ Whisper error: {e}")
+        whisper_model = None
+    
+    # Setup TTS Manager
+    tts_manager = EnhancedTTSManager()
+    
+    # Setup Enhanced LLM Manager
+    llm_manager = EnhancedLLMManager()
+    
+    # Add Ollama
+    print("Checking Ollama...")
+    ollama = OllamaProvider()
+    if ollama.available:
+        llm_manager.add_provider("Ollama (Local)", ollama)
+        print(f"✓ Ollama loaded with model: {ollama.model}")
+    
+    # Add Groq
+    if GROQ_API_KEY:
+        print("Setting up Groq...")
+        try:
+            groq = GroqProvider(GROQ_API_KEY)
+            llm_manager.add_provider("Groq (Fast)", groq)
+            print("✓ Groq provider loaded")
+        except Exception as e:
+            print(f"❌ Groq error: {e}")
+    
+    return llm_manager
+
+# Initialize enhanced components
+print("Initializing enhanced components...")
+audio_manager = AdvancedAudioManager()
+llm_manager = safe_import_and_load()
+continuous_listening = False
+
+# Enhanced GUI variables
+app = None
+output_box = None
+system_status_label = None
+listening_indicator = None
+voice_indicator = None
+
+def log_to_gui(message):
+    """Enhanced GUI logging with timestamps"""
+    try:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] {message}"
+        
+        if output_box:
+            app.after(0, lambda: output_box.configure(state="normal"))
+            app.after(0, lambda: output_box.insert("end", f"{formatted_message}\n"))
+            app.after(0, lambda: output_box.see("end"))
+            app.after(0, lambda: output_box.configure(state="disabled"))
+        print(formatted_message)
+    except:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
+
+def update_listening_indicator(is_listening_now):
+    """Update listening indicator"""
+    try:
+        if listening_indicator:
+            if is_listening_now:
+                listening_indicator.configure(text="🎤 LISTENING...", text_color="red")
+            else:
+                listening_indicator.configure(text="🎤 Ready", text_color="green")
+    except:
+        pass
+
+def update_voice_indicator(is_speaking_now):
+    """Update voice indicator"""
+    try:
+        if voice_indicator:
+            if is_speaking_now:
+                voice_indicator.configure(text="🔊 SPEAKING...", text_color="blue")
+            else:
+                voice_indicator.configure(text="🔊 Ready", text_color="gray")
+    except:
+        pass
+
+def enhanced_record_and_transcribe(duration=5):
+    """Enhanced recording with better error handling and voice response"""
+    global is_speaking
+    
+    try:
+        if audio_manager.selected_input is None:
+            log_to_gui("❌ No input device selected!")
+            return
+
+        update_listening_indicator(True)
+        log_to_gui("🎤 Recording...")
+        
+        # Record audio
+        try:
+            audio, samplerate = audio_manager.record_audio(duration=duration)
+        except Exception as e:
+            log_to_gui(f"❌ Recording failed: {e}")
+            update_listening_indicator(False)
+            return
+        
+        update_listening_indicator(False)
+        log_to_gui("🔄 Processing speech...")
+        
+        # Transcribe with Whisper
+        if whisper_model:
+            try:
+                # Save audio temporarily
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    # Convert float32 to int16 for wav file
+                    audio_int16 = (audio * 32767).astype(np.int16)
+                    write_wav(f.name, samplerate, audio_int16)
+                    temp_path = f.name
+                
+                # Transcribe
+                result = whisper_model.transcribe(temp_path, language="en", fp16=False)
+                query = result["text"].strip()
+                
+                # Clean up temp file
+                os.unlink(temp_path)
+                
+            except Exception as e:
+                log_to_gui(f"❌ Transcription error: {e}")
+                return
+        else:
+            log_to_gui("❌ Whisper not available")
+            return
+        
+        if query and len(query) > 3:
+            log_to_gui(f"👤 You: {query}")
+            
+            # Get AI response
+            try:
+                start_time = time.time()
+                ai_response, provider_used = llm_manager.get_response(query)
+                execution_time = time.time() - start_time
+                
+                log_to_gui(f"🤖 Jarvis ({provider_used}): {ai_response}")
+                
+                # Speak the response
+                if tts_manager and ai_response:
+                    update_voice_indicator(True)
+                    threading.Thread(
+                        target=lambda: [
+                            tts_manager.speak(ai_response),
+                            update_voice_indicator(False)
+                        ],
+                        daemon=True
+                    ).start()
+                
+                # Store in history
+                llm_manager.system_controller.conn.execute(
+                    "INSERT INTO commands_history (command, response, execution_time, success) VALUES (?, ?, ?, ?)",
+                    (query, ai_response, execution_time, True)
+                )
+                llm_manager.system_controller.conn.commit()
+                
+            except Exception as e:
+                error_msg = f"❌ AI Error: {e}"
+                log_to_gui(error_msg)
+                if tts_manager:
+                    tts_manager.speak("I encountered an error while processing your request.")
+        else:
+            log_to_gui("❌ No clear speech detected. Please try again.")
+            if tts_manager:
+                tts_manager.speak("I didn't catch that. Please try again.")
+        
+    except Exception as e:
+        log_to_gui(f"❌ Error: {e}")
+        traceback.print_exc()
+        update_listening_indicator(False)
+        update_voice_indicator(False)
+
+def continuous_listening_loop():
+    """Continuous voice listening mode"""
+    global continuous_listening, is_speaking
+    
+    while continuous_listening:
+        try:
+            if not is_speaking:  # Only listen when not speaking
+                # Use shorter duration for continuous mode
+                enhanced_record_and_transcribe(duration=3)
+            time.sleep(0.5)  # Short pause between listening cycles
+        except Exception as e:
+            log_to_gui(f"❌ Continuous listening error: {e}")
+            time.sleep(2)
+
+def toggle_continuous_listening():
+    """Toggle continuous listening mode"""
+    global continuous_listening
+    
+    if continuous_listening:
+        continuous_listening = False
+        log_to_gui("🔇 Continuous listening disabled")
+        if tts_manager:
+            tts_manager.speak("Continuous listening disabled")
+    else:
+        continuous_listening = True
+        log_to_gui("🎤 Continuous listening enabled")
+        if tts_manager:
+            tts_manager.speak("Continuous listening enabled")
+        # Start continuous listening in a separate thread
+        threading.Thread(target=continuous_listening_loop, daemon=True).start()
+
+def update_system_status():
+    """Enhanced system status with more information"""
+    try:
+        if system_status_label:
+            info = llm_manager.system_controller.get_system_info()
+            
+            status_parts = []
+            status_parts.append(f"CPU: {info.get('cpu_percent', 0):.1f}%")
+            status_parts.append(f"RAM: {info.get('memory_percent', 0):.1f}%")
+            status_parts.append(f"Disk: {info.get('disk_percent', 0):.1f}%")
+            
+            if info.get('battery'):
+                bat = info['battery']
+                battery_icon = "🔌" if bat['plugged'] else "🔋"
+                status_parts.append(f"{battery_icon}: {bat['percent']:.0f}%")
+            
+            status_text = " | ".join(status_parts)
+            system_status_label.configure(text=status_text)
+            
+            app.after(3000, update_system_status)  # Update every 3 seconds
+    except Exception as e:
+        print(f"Status update error: {e}")
+
+def startup_messages():
+    """Enhanced startup messages"""
+    time.sleep(1)
+    
+    log_to_gui("=" * 60)
+    log_to_gui("🚀 JARVIS ULTIMATE - COMPLETE AI SYSTEM CONTROLLER")
+    log_to_gui("=" * 60)
+    log_to_gui("")
+    log_to_gui("🎛️ FULL SYSTEM CAPABILITIES:")
+    log_to_gui("  • 🎤 Advanced Voice Recognition & Synthesis")
+    log_to_gui("  • 💻 Complete System Control & Monitoring")
+    log_to_gui("  • 📱 Application Management")
+    log_to_gui("  • 🗂️ File Operations")
+    log_to_gui("  • 🌐 Network Operations")
+    log_to_gui("  • 🔊 Audio Control")
+    log_to_gui("  • 📸 Screen Capture")
+    log_to_gui("  • 🤖 Multi-LLM AI Integration")
+    log_to_gui("")
+    log_to_gui("💬 ENHANCED VOICE COMMANDS:")
+    log_to_gui("  • 'Open YouTube' / 'Launch Chrome'")
+    log_to_gui("  • 'System status' / 'Check computer'")
+    log_to_gui("  • 'Mute volume' / 'Set volume to 50'")
+    log_to_gui("  • 'Lock screen' / 'Shutdown computer'")
+    log_to_gui("  • 'Take screenshot' / 
